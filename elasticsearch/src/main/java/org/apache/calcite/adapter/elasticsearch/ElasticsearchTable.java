@@ -97,21 +97,27 @@ public class ElasticsearchTable extends AbstractQueryableTable implements Transl
    * @return Enumerator of results
    */
   private Enumerable<Object> find(String index, List<String> ops,
-      List<Map.Entry<String, Class>> fields) {
+                                  List<Map.Entry<String, Class>> fields) {
     final String dbName = index;
 
-    final String queryString = "{" + Util.toString(ops, "", ", ", "") + "}";
+    final StringBuilder queryString = new StringBuilder("{");
+    if (ops.stream().noneMatch(v -> v.contains("size"))) {
+      String size = "\"size\":" + (client.settings().get("default.query.results.size") != null ? client.settings().get("default.query.results.size") : "100");
+      queryString.append(size).append(",");
+    }
 
+    queryString.append(Util.toString(ops, "", ", ", "")).append("}");
     final Function1<SearchHit, Object> getter = ElasticsearchEnumerator.getter(fields);
 
     return new AbstractEnumerable<Object>() {
       public Enumerator<Object> enumerator() {
         final Iterator<SearchHit> cursor = client.prepareSearch(dbName).setTypes(typeName)
-            .setSource(queryString).execute().actionGet().getHits().iterator();
+                .setSource(queryString.toString()).execute().actionGet().getHits().iterator();
         return new ElasticsearchEnumerator(cursor, getter);
       }
     };
   }
+
 
   /**
    * Implementation of {@link org.apache.calcite.linq4j.Queryable} based on
